@@ -1,0 +1,1409 @@
+/*
+
+YARA
+https://virustotal.github.io/yara/
+
+About YARA (Japanese)
+https://digitaltravesia.jp/usamimihurricane/webhelp/_RESOURCE/MenuItem/another/anotherAboutYARA.html
+
+This YARA rule will be used for AoZoraSiroNeko.exe (helper application of "UsaMimi Hurricane").
+"UsaMimi Hurricane" is a Japanese General-purpose Process Memory Editor-cum-Debugger.
+
+UsaMimi Hurricane (Download Page)
+http://www.vector.co.jp/soft/win95/prog/se375830.html
+
+No "." or "-" or (space) in rule's name. Any alphanumeric character and "_" are OK.
+You should NOT use Japanese character.
+
+You should set "///" and "////" and "rule" as hierarchy level syntax for outliner.
+
+*/
+
+// comment
+/*
+ multi-line comment
+*/
+
+/*
+//Global rules for all other rules
+global rule g_SizeLimit
+{
+	condition:
+		filesize < 512MB
+}
+
+global rule g_PEfile
+{
+	strings:
+		$a = "MZ"
+
+	condition:
+		uint32(@a[1] + uint32(@a[1] + 0x3C)) == 0x00004550 //"PE"
+}
+*/
+
+//modules
+import "math"
+import "hash"
+import "elf"
+import "pe"
+import "cuckoo"
+
+///YARA rule examples
+//Tags for filtering YARA's output.
+rule Misc_Suspicious_Strings : Tag1 Tag2 Test
+{
+	meta:
+		Description0 = "Rule for test and Rule examples"
+		Description1 = "Examples: UsaMimi Hurricane, ProcessMonitor, ShellCode, SEH, VM, etc."
+
+	strings:
+		//Rule for testing your own rules/strings (also "Test" tag)
+		$Test0 = "No Cat No Life"  nocase ascii wide
+		$Test1 = { 4E 6F 20 43 61 74 20 4E 6F 20 4C 69 66 65 }
+
+		/*
+		//Rule examples
+		$0 = /UsaMimi[0-9a-zA-Z_]{0,5}.exe/ ascii wide //UsaMimi.exe or UsaMimi64.exe or UsaMimi_v024.exe
+		$1 = "ProcmonDebugLogger" ascii wide
+		$2 = "WinExec"
+		$3 = {64 8B ?? 30 00 00 00} //or {64 8B (05|0D|15|1D|25|2D|35|3D) 30 00 00 00}
+		$4 = {64 A1 30 00 00 00}    //or {64 A1 30 00 00 00 [1-20] 0C}
+		$5 = {64 89 25 00 00 00 00}
+		$6 = "vmtools" nocase
+		$7 = "VMware Tools" nocase ascii wide
+		$8 = "VBoxMouse" nocase
+		$9 = "VBOX" nocase ascii wide fullword
+		$A = "QEMU" nocase ascii wide
+		*/
+
+	condition:
+		any of them
+		//any of them and pe.machine == pe.MACHINE_AMD64  //Scan only 64bit(PE32+) or MACHINE_I386 as 32bit(PE32)
+		//any of them and pe.characteristics & pe.DLL //Scan only DLL
+}
+
+///Algorithm
+rule AES : Crypto
+{
+	meta:
+		Author = "Luca@Digital Travesia"
+
+	strings:
+		$a0 = { 63 7C 77 7B F2 6B 6F C5 30 01 67 2B FE D7 AB 76 }
+		$a1 = { 52 09 6A D5 30 36 A5 38 BF 40 A3 9E 81 F3 D7 FB }
+		$AESDotNet = "AesCryptoServiceProvider"
+
+	condition:
+		any of them
+}
+
+rule Blowfish : Crypto
+{
+	strings:
+		$a0 = { A6 0B 31 D1 }
+		$a1 = { AC B5 DF 98 }
+		$a2 = { DB 72 FD 2F }
+		$a3 = { B7 DF 1A D0 }
+
+	condition:
+		all of them
+}
+
+rule camellia : Crypto
+{
+	strings:
+		$a0 = { 00 70 70 70 00 82 82 82 00 2C 2C 2C 00 EC EC EC }
+		$a1 = { E0 E0 E0 00 05 05 05 00 58 58 58 00 D9 D9 D9 00 }
+
+	condition:
+		all of them
+}
+
+rule CRC32 : Crypto
+{
+	strings:
+		$crc32_01 = { B7 1D C1 04 }
+		$crc32_02 = { 20 83 B8 ED }
+		$crc32_03 = { DB 8E 60 82 }
+
+	condition:
+		any of them
+}
+
+rule DES_ip : Crypto
+{
+	strings:
+		$a0 = { 3A 32 2A 22 1A 12 0A 02 }
+
+	condition:
+		$a0
+}
+
+rule DES_sbox : Crypto
+{
+	strings:
+		$a0 = { 0E 04 0D 01 02 0F 0B 08 03 0A 06 0C 05 09 00 07 }
+
+	condition:
+		$a0
+}
+
+rule MD5 : Crypto
+{
+	strings:
+		$a0 = { 01 23 45 67 }
+		$a1 = { 89 AB CD EF }
+		$a2 = { FE DC BA 98 }
+		$a3 = { 76 54 32 10 }
+		$a4 = { 78 A4 6A D7 }
+
+	condition:
+		 all of them
+}
+
+rule RC2_PITABLE : Crypto
+{
+	strings:
+		$a0 = { D9 78 F9 C4 19 DD B5 ED 28 E9 FD 79 4A A0 D8 9D }
+
+	condition:
+		$a0
+}
+
+rule RC5 : Crypto
+{
+	strings:
+		$a0 = { 6B 2A ED 8A 62 51 E1 B7 }
+		$a1 = { 15 7C 4A 7F B9 79 37 9E }
+
+	condition:
+		$a0 and $a1
+}
+
+rule RC6 : Crypto
+{
+	strings:
+		$a0 = { 63 51 E1 B7 }
+		$a1 = { B9 79 37 9E }
+
+	condition:
+		all of them
+}
+
+rule RIPEMD160 : Crypto
+{
+	strings:
+		$a0 = { 01 23 45 67 }
+		$a1 = { 89 AB CD EF }
+		$a2 = { FE DC BA 98 }
+		$a3 = { 76 54 32 10 }
+		$a4 = { 99 79 82 5A }
+
+	condition:
+		 all of them
+}
+
+rule SHA1 : Crypto
+{
+	strings:
+		$a0 = { 01 23 45 67 }
+		$a1 = { 89 AB CD EF }
+		$a2 = { FE DC BA 98 }
+		$a3 = { 76 54 32 10 }
+		$a4 = { F0 E1 D2 C3 }
+
+	condition:
+                all of them
+}
+
+rule SHA224_Init : Crypto
+{
+	strings:
+		$a0 = { D8 9E 05 C1 }
+		$a1 = { 07 D5 7C 36 }
+		$a2 = { 17 DD 70 30 }
+		$a3 = { 39 59 0E F7 }
+		$a4 = { 31 0B C0 FF }
+		$a5 = { 11 15 58 68 }
+		$a6 = { A7 8F F9 64 }
+		$a7 = { A4 4F FA BE }
+
+	condition:
+		all of them
+}
+
+rule SHA256_Init : Crypto
+{
+	strings:
+		$a0 = { 67 E6 09 6A }
+		$a1 = { 85 AE 67 BB }
+		$a2 = { 72 F3 6E 3C }
+		$a3 = { 3A F5 4F A5 }
+		$a4 = { 7F 52 0E 51 }
+		$a5 = { 8C 68 05 9B }
+		$a6 = { AB D9 83 1F }
+		$a7 = { 19 CD E0 5B }
+
+	condition:
+		all of them
+}
+
+rule SHA256 : Crypto
+{
+	strings:
+		$a0 = { 98 2F 8A 42 }
+		$a1 = { 91 44 37 71 }
+		$a2 = { CF FB C0 B5 }
+		$a3 = { A5 DB B5 E9 }
+
+	condition:
+		all of them
+}
+
+rule SHA512 : Crypto
+{
+	strings:
+		$c0 = { 22 AE 28 D7 98 2F 8A 42 }
+		$c1 = { CD 65 EF 23 91 44 37 71 }
+		$c2 = { 2F 3B 4D EC CF FB C0 B5 }
+
+	condition:
+		all of them
+}
+
+rule SHA3 : Crypto
+{
+	meta:
+		Description = "This rule is not for Keccak"
+
+	strings:
+		$c0 = { 01 00 00 00 00 00 00 00 82 80 00 00 00 00 00 00 8A 80 00 00 00 00 00 80 }
+
+	condition:
+		$c0
+}
+
+rule TEA : Crypto
+{
+	strings:
+		$LE = { B9 79 37 9E }
+		$BE = { 9E 37 79 B9 }
+
+	condition:
+		$LE or $BE
+}
+
+rule SM4 : Crypto
+{
+	strings:
+		$Sbox = { D6 90 E9 FE CC E1 3D B7 16 B6 14 C2 28 FB 2C 05 }
+		$ConstantKey1 = { 15 0E 07 00 }
+		$ConstantKey2 = { 31 2A 23 1C }
+		$ConstantKey3 = { 4D 46 3F 38 }
+		$ConstantKey4 = { 69 62 5B 54 }
+
+	condition:
+                all of them
+}
+
+rule xorshift : Crypto                
+{
+	strings:
+		$xor = { A2 8C D6 92 }
+		$xor64 = { 44 7A BF CB 8D 40 39 01 }
+
+	condition:
+                any of them
+}
+
+rule xorshift96 : Crypto
+{
+	strings:
+		$xor96staticx = { 15 CD 5B 07 }
+		$xor96staticy = { E5 55 9A 15 }
+		$xor96staticz = { B5 3B 12 1F }
+
+	condition:
+                all of them
+}
+
+rule xorshift128 : Crypto
+{
+	strings:
+		$xor128staticx = { 15 CD 5B 07 }
+		$xor128staticy = { E5 55 9A 15 }
+		$xor128staticz = { B5 3B 12 1F }
+		$xor128staticw = { 33 13 49 05 }
+
+	condition:
+                all of them
+}
+
+rule Maru_hash : Crypto
+{
+	meta:
+		Description = "Copyright c 2017 Odzhan"
+
+	strings:
+		$a0 = { 39 99 5E 4C 75 37 4C 65 }
+
+	condition:
+		$a0
+}
+
+rule ChaCha20 : Crypto
+{
+	strings:
+		$ChaCha20const0 = { 65 78 70 61 } 
+		$ChaCha20const1 = { 6E 64 20 33 } //"expand 32-byte k"
+		$ChaCha20const2 = { 32 2D 62 79 }
+		//$ChaCha20const1 = { 6E 64 20 } //"expand 32-byte k" and "expand 16-byte k"
+		//$ChaCha20const2 = { 2D 62 79 }
+		$ChaCha20const3 = { 74 65 20 6B }
+
+	condition:
+                all of them
+}
+
+rule base64 : Crypto
+{
+	strings:
+		$a0 = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=" ascii wide
+		$B64DotNet0 = "FromBase64String"
+		$B64DotNet1 = "ToBase64String"
+
+	condition:
+		any of them
+}
+
+rule GenRandom : Crypto
+{
+	meta:
+		Author = "Luca@Digital Travesia"
+		Description = "Search: 69069 1664525 39894229 48828125 1566083941 1812433253 2100005341"
+
+	strings:
+		$a0 = { CD 0D 01 00 }
+		$a1 = { 0D 66 19 00 }
+		$a2 = { D5 BC 60 02 }
+		$a3 = { DD 0E E9 02 }
+		$a4 = { 65 8B 58 5D }
+		$a5 = { 65 89 07 6C }
+		$a6 = { DD 89 2B 7D }
+		$a7 = "SystemFunction036"
+		$a8 = "rand" fullword
+		$a9 = "CryptGenRandom" fullword
+		$a10 = "BCryptGenRandom"
+		$a11 = "RtlRandom" fullword
+		$a12 = "RtlRandomEx"
+
+	condition:
+		any of them
+}
+
+rule Mersenne_Twister_19937 : Crypto
+{
+	meta:
+		Author = "Luca@Digital Travesia"
+
+	strings:
+		$a0 = { DF B0 08 99 }
+		$a1 = { 80 56 2C 9D }
+		$a2 = { 00 00 C6 EF }
+		//$a3 = { F5 75 BD E4 } //Another Version
+		//$a4 = { 80 52 5E 65 }
+		//$a5 = { 00 80 D5 FF }
+
+	condition:
+		2 of them
+}
+
+rule Windows_CryptAPI : Crypto
+{
+	strings:
+		$a0 = "CryptCreateHash" ascii wide fullword
+		$a1 = "CryptEncrypt" ascii wide fullword
+		$a2 = "CryptDecrypt" ascii wide fullword
+		$a3 = "BCryptCreateHash" ascii wide
+		$a4 = "BCryptEncrypt" ascii wide
+		$a5 = "BCryptDecrypt" ascii wide
+		$a6 = "CryptStringToBinary" ascii wide
+		$a7 = "CryptBinaryToString" ascii wide
+		$CryptDotNet = "System.Security.Cryptography"
+
+	condition:
+		//any of ($a3,$a4,$a5) or any of ($a0,$a1,$a2)
+		any of them
+}
+
+rule Compression : Crypto
+{
+	strings:
+		$Zlib_base_length = { 00 01 02 03 04 05 06 07 08 0A 0C 0E 10 14 18 1C 20 28 30 38 40 50 60 70 80 A0 C0 E0 00 }
+		$LZ_Huffman = { 00 20 30 40 50 58 60 68 70 78 80 88 90 94 98 9C A0 A4 A8 AC B0 B4 B8 BC C0 C2 C4 C6 C8 CA CC CE D0 D2 D4 D6 D8 DA DC DE E0 E2 E4 E6 E8 EA EC EE F0 F1 F2 F3 F4 F5 F6 F7 F8 F9 FA FB FC FD FE FF }
+		$LZMA = { 00 00 00 00 01 02 03 04 05 06 04 05 07 07 07 07 07 07 07 0A 0A 0A 0A 0A }
+		$LZ4_0 = { D3 BB DA 2C 39 8A 21 00 }
+		$LZ4_1 = { 00 00 00 00 00 01 01 02 00 03 01 03 01 04 02 07 }
+
+	condition:
+		 any of them
+}
+
+///CTF
+rule CTF_Flag_Strings : CTF
+{
+	strings:
+		$Flag1 = "ctf{"  nocase ascii wide
+		$Flag2 = "flag{"  nocase ascii wide
+		$Flag3 = "f14g{"  nocase ascii wide
+		$Flag4 = "f149{"  nocase ascii wide
+		$picoCTF_Flag_Text = "picoCTF{" nocase ascii wide //picoCTF2021
+		$picoCTF_Flag_Base64 = "cGljb" ascii //picoCTF2021
+		$picoCTF_Flag_ROT13 = "cvpbPGS" ascii //picoCTF2021
+		$picoCTF_Flag_Text_Padding = {70 [1-16] 69 [1-16] 63 [1-16] 6F [1-16] 43 [1-16] 54 [1-16] 46 [1-16] 7B} //picoCTF2021
+		$picoCTF_Flag_Text_Padding_Reverse = {7B [1-32] 46 [1-32] 54 [1-32] 43 [1-32] 6F [1-32] 63 [1-32] 69 [1-32] 70} //picoCTF2022
+
+	condition:
+		any of them
+}
+
+rule CTF_Find_a_FlagFile_in_Many_Files : CTF
+{
+	meta:
+		Author = "Luca@Digital Travesia"
+		Description0 = "Find a certain file with Magic byte (File signature)"
+		Description1 = "In this case, File extension is FAKE or REMOVED"
+
+	strings:
+		$IsPE = "MZ"
+		$IsELF = {7F 45 4C 46}
+		$IsPNG = {89 50 4E 47}
+		$IsJPEG = {FF D8}
+		$IsBMP = "BM"
+		$IsGIF = {47 49 46}
+		$IsTIFF = {49 49 2A 00}
+		$IsTIFFbe = {4D 4D 00 2A}
+		$IsPCAP1 = {A1 B2 C3 D4}
+		$IsPCAP2 = {D4 C3 B2 A1}
+		$IsPCAPNG = {0A 0D 0D 0A}
+
+	condition:
+		$IsPE at (0) or
+		$IsELF at (0) or
+		$IsPNG at (0) or
+		$IsJPEG at (0) or
+		$IsBMP at (0) or
+		$IsGIF at (0) or
+		$IsTIFF at (0) or $IsTIFFbe at (0) or
+		$IsPCAP1 at (0) or $IsPCAP2 at (0) or
+		$IsPCAPNG at (0)
+		// or $IsPE in (0..0x100) //Deep Scan for Fake Header
+		// or $IsPE in (0..filesize-5) //Full Scan example
+}
+
+///Hash check
+rule MD5_Hash : Hash
+{
+	meta:
+		Author = "Luca@Digital Travesia"
+		Description = "MD5 test for UsaTest2_x64.exe"
+
+	condition:
+		hash.md5(0, filesize) == "47d7e49c3f5e510cd0bcda4bbfbcd512"
+}
+
+rule SHA1_Hash : Hash
+{
+	condition:
+		hash.sha1(0, filesize) == "50e7305cae4084cc7d05f92b44e14447c6fecdec"
+}
+
+rule SHA256_Hash : Hash
+{
+	condition:
+		hash.sha256(0, filesize) == "0d5928f1613440506d1cfdd6c6847011c86c97348ee65bc89fe9da068a55818e"
+}
+
+rule PE_imphash : Hash
+{
+	meta:
+		Description = "imphash is NOT reliable hash"
+		Solution = "Make ssdeep for serial of importAPI names : impfuzzy"
+
+	condition:
+		pe.imphash() == "b0fc8e525643d56a0d748877f66e0227"
+}
+
+rule PE_Section_entropy : Hash
+{
+	meta:
+		Description = "sections[number] is zero-based"
+
+	condition:
+		math.entropy(pe.sections[0].raw_data_offset, pe.sections[0].raw_data_size) >= 7
+}
+
+
+rule PE_Rich_header : Hash
+{
+	meta:
+		Description0 = "Rich header rule example for UsaTest2_x64.exe"
+		Description1 = "Rich header rules are not suitable for malware family classification"
+
+	condition: 
+		uint16(0x00) == 0x5A4D and
+		pe.rich_signature.offset == 0x80 and
+		pe.rich_signature.length == 0x68 and
+		pe.rich_signature.key == 0xCC67CC6E and
+		//This pe.rich_signature.clear_data: XOR offset 0x80 to 0xE7 with 0xCC67CC6E
+		//hash.md5(pe.rich_signature.clear_data) == "4730e68d9b4d1d63e301ae69a6bcf902"
+		hash.sha256(pe.rich_signature.clear_data) == "d7c563cc6eb3f4518ed8ca3f192e883822412b126709cd0f865b401541e5289b"
+
+		/*
+		pe.rich_signature.clear_data (UsaTest2_x64.exe)
+		00000080-000000EF: 70h(112)Bytes
+		Offset   : +0 +1 +2 +3 +4 +5 +6 +7 +8 +9 +A +B +C +D +E +F
+		00000080 : 44 61 6E 53 00 00 00 00 00 00 00 00 00 00 00 00 
+		00000090 : 09 78 83 00 0A 00 00 00 09 78 84 00 01 00 00 00 
+		000000A0 : 09 78 87 00 02 00 00 00 09 78 93 00 23 00 00 00 
+		000000B0 : 00 00 01 00 F7 02 00 00 1B 9D AA 00 AE 00 00 00 
+		000000C0 : 1B 9D 9E 00 10 00 00 00 1B 9D AB 00 74 01 00 00 
+		000000D0 : 1B 9D AF 00 05 00 00 00 1B 9D 9A 00 01 00 00 00 
+		000000E0 : 1B 9D 9D 00 01 00 00 00 52 69 63 68 6E CC 67 CC 
+		*/
+		and pe.rich_signature.toolid(131,30729)//and pe.rich_signature.toolid(0x83,0x7809)
+		and pe.rich_signature.toolid(132,30729)
+		and pe.rich_signature.toolid(135,30729)
+		and pe.rich_signature.toolid(147,30729)
+		and pe.rich_signature.toolid(1,0)
+		and pe.rich_signature.toolid(170,40219)
+		and pe.rich_signature.toolid(158,40219)
+		and pe.rich_signature.toolid(171,40219)
+		and pe.rich_signature.toolid(175,40219)
+		and pe.rich_signature.toolid(154,40219)
+		and pe.rich_signature.toolid(157,40219)
+}
+
+rule PE_Resource_Hash : Hash
+{
+	meta:
+		Author = "Luca@Digital Travesia"
+		Description0 = "Example to detect UsaTest2.EXE"
+		Description1 = "Resource object is usable for malware family classification"
+
+	condition:
+		for any i in (0..pe.number_of_resources - 1):
+		(
+		pe.resources[i].id == 1 and 
+		pe.resources[i].type == pe.RESOURCE_TYPE_ICON and
+		pe.resources[i].length == 0x8A8 and 
+		hash.md5(pe.resources[i].offset, pe.resources[i].length) == "970b57116136c7d8a373323357d7075e"
+		)
+}
+
+///Malware
+rule Efficient_DetectPE : Malware
+{
+	meta:
+		Description = "Example to detect certain PEfile efficiently"
+
+	strings:
+		$SusByte1 = { AA BB CC DD }
+		$SusStr1 = "Malware" nocase ascii wide
+
+	condition:
+		uint16(0) == 0x5A4D and
+		filesize > 42KB and
+		filesize < 1MB and
+		pe.number_of_sections == 7 and
+		pe.sections[3].name == ".resStr" and
+		pe.imports("KERNEL32.DLL","CreateRemoteThread") and
+		$SusByte1 and $SusStr1
+
+}
+
+rule AntiDebug_Functions : Malware
+{
+	meta:
+		Description = "pe.imports() will miss dynamic linking."
+
+	strings:
+		$IDP  = "IsDebuggerPresent"
+		$CRDP = "CheckRemoteDebuggerPresent"
+		$ODS  = "OutputDebugString"
+		$NQIP = /(Nt|Zw)QueryInformationProcess/
+		$NSIP = /(Nt|Zw)SetInformationProcess/
+		$NSIT = /(Nt|Zw)SetInformationThread/
+		$NQO  = /(Nt|Zw)QueryObject/
+		$GTC  = "GetThreadContext"
+		$STC  = "SetThreadContext"
+		$SUEF = "SetUnhandledExceptionFilter"
+		$RE   = "RaiseException"
+		$RGCP = "RtlGetCurrentPeb"
+		$WPM  = "WriteProcessMemory"
+		$K32GPMI = "K32GetProcessMemoryInfo"
+		$DAP  = "DebugActiveProcess" //Attach own process or global hook to detect debugger
+		$AVEH = "AddVectoredExceptionHandler"
+		$NYE  = /(Nt|Zw)YieldExecution/
+		$DURB = "DbgUiRemoteBreakin"
+		$DUIRB = "DbgUiIssueRemoteBreakin"
+		$DUDAP = "DbgUiDebugActiveProcess"
+
+	condition:
+		any of them
+		//2 of them
+}
+
+rule AntiDebugCodes_or_ShellCodes : Malware
+{
+	strings:
+		$AD_RDTSC0 = { 0F 31 33 C9 03 C8 0F 31 2B C1 3D }
+		$AD_RDTSC1 = { 0F 31 [4-16] 0F 31}
+		$AD_PEB0 = { 64 A1 30 00 00 00 0F B6 40 02 } //PEB!IsDebugged example
+		$AD_PEB1 = { 64 A1 30 00 00 00 8B 40 02 } //PEB!IsDebugged  example
+		$AD_PEB2 = { 64 A1 30 00 00 00 8B 40 68 83 E0 70 } //PEB!NtGlobalFlags example
+		$AD_PEB3 = { 64 A1 30 00 00 00 8B 40 18 8B 40 10 } //HeapFlag  example
+		$Shell0 = { 64 A1 30 00 00 00 [1-20] 0C } //PEB
+		$Shell1 = { 64 8B ?? 30 00 00 00 } //or { 64 8B (05|0D|15|1D|25|2D|35|3D) 30 00 00 00 } //PEB
+		$Shell2 = { 6A 30 ?? 64 8B } //PEB
+		$Shell3 = { 64 (33|8B) ?? 30 } //PEB
+		$Shell4 = { 60 [1-16] 65 (48|4C) 8B } //PEB 64bit
+		$Shell5 = { 65 (48|4C) 8B [1-16] 60 } //PEB 64bit
+		$Shell6 = { 64 [1-2] 30 00 00 00 [1-16] 8B ?? (18|0C) [1-16] 8B ?? (30|14|1C) } //PEB->ModuleList
+		$Shell7 = { 30 [1-8] 64 8B [1-16] 8B ?? (18|0C) [1-16] 8B ?? (30|14|1C) } //PEB->ModuleList
+		$Shell8 = { 30 [1-8] 8B ?? 0C [1-8] 8B ?? (14|1C) } //PEB->ModuleList
+		$Shell9 = { 04 25 30 [1-16] 60 [1-16] 18 } //PEB->ModuleList 64bit
+		//$Shell10 = { 60 [1-16] 18 [1-16] (10|20|30) } //PEB->ModuleList 64bit  //Avoid false hit
+		$Shell11 = { (8B|03) ?? 3C [1-8] 8B [1-2] 78 [1-8] (8B|8D) [1-2] (18|20) } //PE Header->Export name table
+		$Shell12 = { 3C [1-8] 78 [1-8] 20 } //PE Header->Export name table
+		$Shell13 = { 47 65 74 50 [1-16] 72 6F 63 41 [1-16] 64 64 72 65 } //Raw (Not hashed) "GetProcAddress"
+		$Shell14 = { 64 64 72 65 [1-16] 72 6F 63 41 [1-16] 47 65 74 50 } //Raw (Not hashed) "GetProcAddress" Push
+		$Shell15 = { 75 73 65 72 [1-8] 33 32 } //Raw "user32"
+		$Shell16 = { 33 32 [1-8] 75 73 65 72 } //Raw "user32" Push
+		$Shell17 = { 75 72 6C 6D [1-8] 6F 6E } //Raw "urlmon"
+		$Shell18 = { 6F 6E [1-8] 75 72 6C 6D } //Raw "urlmon" Push
+		$Shell19 = { 77 73 32 5F [1-8] 33 32 } //Raw "ws2_32"
+		$Shell20 = { 33 32 [1-8] 77 73 32 5F } //Raw "ws2_32" Push
+		$Shell21 = { 77 69 6E 69 [1-8] 6E 65 74 } //Raw "wininet"
+		$Shell22 = { 6E 65 74 [1-8] 77 69 6E 69 } //Raw "wininet" Push
+		$Shell23 = { 57 69 6E 45 [1-8] 78 65 63 } //Raw "WinExec"
+		$Shell24 = { 78 65 63 [1-8] 57 69 6E 45 } //Raw "WinExec" Push
+		$Shell25 = { 43 72 65 61 [1-8] 74 65 50 72 } //Raw "CreateProcess"
+		$Shell26 = { 74 65 50 72 [1-8] 43 72 65 61 } //Raw "CreateProcess" Push
+		$SEH0 = { 64 FF 35 00 00 00 00 64 89 25 00 00 00 00 31 C0 F7 F0 64 8F 05 00 00 00 00 83 C4 04 }
+		$SEH1 = { 64 8B (05|0D|15|1D|25|2D|35|3D) 00 00 00 00 }
+		$SEH2 = { 64 89 25 00 00 00 00 }
+		$EIP0 = { E8 00 00 00 00 (58|59|5A|5B|5C|5D|5E|5F) }
+		$EIP1 = { D9 EE D9 74 24 F4 (58|59|5A|5B|5C|5D|5E|5F) }
+		$EIP2 = { D9 EE 9B D9 74 24 F4 (58|59|5A|5B|5C|5D|5E|5F) }
+		//$IAT0 = { FF (15|25) } //Please use UsaMimi Hurricane's IAT search for alternative.
+		$EXEC = "WinExec" //Fullword
+
+	condition:
+		any of them
+}
+
+rule Detect_AntiVirus_Softwares : Malware
+{
+	meta:
+		Description = "For AntiVirus software installed on your PC"
+
+	strings:
+		$a0 = "AVAST.exe"  //.exe and .dll and .sys names
+		$a1 = /kl[0-9a-zA-Z]{1,6}.sys/ nocase ascii wide
+		$a2 = "trend micro" nocase ascii wide
+		$a3 = "trendmicro" nocase ascii wide
+		$a4 = "fireeye" nocase ascii wide
+		$a5 = "vmvault" nocase ascii wide
+		$a6 = "bitdefender" nocase ascii wide
+		$a7 = "bluecoat" nocase ascii wide
+		$a8 = "eset" nocase ascii wide fullword
+		$Service0 = "OfficeSoftwareProtectionService" nocase ascii wide
+
+	condition:
+		any of them
+}
+
+rule Detect_Tools : Malware
+{
+	strings:
+		//EXE and API
+		//It's possible NO EXTENSION to search tools as process name.
+		$UsaMimi0 = /UsaMimi[0-9a-zA-Z_]{0,5}.exe/ nocase ascii wide //For UsaMimi Hurricane 32Bit/64Bit/Beta versions
+		$UsaMimi1 = { 82 A4 82 B3 82 DD 82 DD } //ANSI
+		$UsaMimi2 = { 46 30 55 30 7F 30 7F 30 } //Unicode
+		$UsaMimi3 = { E3 81 86 E3 81 95 E3 81 BF E3 81 BF } //UTF-8
+		$AZSN = "AoZoraSiroNeko.exe" nocase ascii wide
+		$UMPE = "UMPE.exe" nocase ascii wide
+		$UMPE64 = "UMPE64.exe" nocase ascii wide
+		$Neko57 = "Neko57.EXE" nocase ascii wide
+		$OllyDbg = "ollydbg.exe" nocase ascii wide
+		$ProcMon0 = "ProcmonDebugLogger" nocase ascii wide
+		$ProcMon1 = "Procmon.exe" nocase ascii wide
+		$ProcMon2 = "ProcessMonitor" nocase ascii wide //FileDescription
+		$ProcMon3 = "PROCMON_WINDOW_CLASS" nocase ascii wide //Window info
+		$ProcMon4 = "Procmon64.exe" nocase ascii wide
+		$ProcExp = "procexp" nocase ascii wide
+		$sysinternals = "sysinternals" nocase ascii wide //Window info
+		$WireShark0 = "wireshark.exe" nocase wide ascii
+		$WireShark1 = "dumpcap.exe" nocase ascii wide
+		$WireShark2 = "TheWiresharkdevelopercommunity" nocase ascii wide //FileDescription
+		$ImmDbg = "ImmunityDebugger.exe" nocase ascii wide
+		//$IDA = /ida(q)?(64)?.exe/ nocase wide ascii
+		$IDA0 = "idag.exe" nocase wide ascii
+		$IDA1 = "idag64.exe" nocase wide ascii
+		$IDA2 = "idaw.exe" nocase wide ascii
+		$IDA3 = "idaw64.exe" nocase wide ascii
+		$IDA4 = "idaq.exe" nocase wide ascii
+		$IDA5 = "idaq64.exe" nocase wide ascii
+		$IDA6 = "win32_remote.exe" nocase wide ascii
+		$IDA7 = "win64_remote64.exe" nocase wide ascii
+		$WinDbg = "windbg.exe" nocase wide ascii
+		$x32dbg = "x32dbg.exe" nocase wide ascii
+		$x64dbg = "x64dbg.exe" nocase wide ascii
+		$PEBrowseDbg = "PEBrowseDbg.exe" nocase wide ascii
+		$CobaltStrike = "cobaltstrike.exe" nocase wide ascii
+		$Syser0 = "syserdbgmsg" nocase wide ascii
+		$Syser1 = "syserboot" nocase wide ascii
+		$SysExp0 = "SystemExplorer.exe" nocase wide ascii
+		$SysExp1 = "System Explorer" nocase ascii wide
+		$APIMon0 = "apimonitor-x86.exe" nocase wide ascii
+		$APIMon1 = "apimonitor-x64.exe" nocase wide ascii
+		$GMER = "gmer.exe" nocase wide ascii
+		$FTK = "FTK Imager.exe" nocase wide ascii
+		$Volatility = "volatility.exe" nocase wide ascii
+		$Fiddler = "Fiddler.exe" nocase wide ascii
+		$EMET = "EMET_" nocase wide ascii //EMET_GUI.exe etc
+		$SpyBot = "spybotsd.exe" nocase ascii wide
+		$TCPDump0 = "Tcpdump.exe" nocase ascii wide
+		$TCPView0 = "Tcpview.exe" nocase ascii wide
+		$TCPView1 = "TCPViewClass" nocase ascii wide //Window info
+		$TCPDump1 = "TCP/UDPendpointviewer" nocase ascii wide //FileDescription
+		$SmartSniff0 = "smsniff.exe" nocase ascii wide
+		$SmartSniff1 = "NirSoft" nocase ascii wide //CompanyName
+		$SmartSniff2 = "SmartSniff" nocase ascii wide //Window info
+		$SocketSniff = "SocketSniff.exe" nocase ascii wide
+		$CurrPorts = "cports.exe" nocase ascii wide
+		$RegShot0 = "regshot.exe" nocase ascii wide
+		$RegShot1 = "RegshotTeam" nocase ascii wide //CompanyName
+		$cuckoo = "cuckoo" nocase ascii wide
+		$SysMon0 = "Sysmon.exe"  nocase ascii wide
+		$SysMon1 = "Sysmon64.exe"  nocase ascii wide
+		$SysMon2 = "SysmonDrv"  nocase ascii wide
+		$RegMon0 = "regmon.exe"  nocase ascii wide
+		$PEiD = "peid.exe"  nocase ascii wide
+		$PEtools = "petools.exe"  nocase ascii wide
+		$SysAnalyzer = "sysanalyzer" nocase wide ascii //EXE or Registry Key
+		$InstallWatch = "InstallWatch" nocase wide ascii //EXE or Registry Key
+		$win32dd = "win32dd.exe" nocase ascii wide
+		$win64dd = "win64dd.exe" nocase ascii wide
+		$NetStatusMon = "NetStatusMonitor.exe" nocase ascii wide
+		$Nanomite = "qtNanomite.exe" nocase ascii wide
+		$NetMonitor = "NetMonitor" nocase ascii wide
+		$Taskmgr = "Taskmgr.exe" nocase ascii wide
+		$AnVir0 = "anvir" nocase ascii wide
+		$AnVir1 = "anvir.exe" nocase ascii wide
+		$ProcessKiller0 = "Process Killer" nocase ascii wide
+		$ProcessKiller1 = "ProcessKiller.exe" nocase ascii wide
+		$ProcessKiller2 = "KillProcess" nocase ascii wide
+		$ProcessHacker0 = "Process Hacker" nocase ascii wide
+		$ProcessHacker1 = "ProcessHacker.exe" nocase ascii wide
+		$Bromium = "Bromium" nocase ascii wide
+		$NirFileRW = "AppReadWriteCounter.exe" nocase ascii wide
+		$NirFileAct = "FileActivityWatch.exe" nocase ascii wide
+		$NirTcpUdpWatch = "LiveTcpUdpWatch.exe" nocase ascii wide
+		$Cn360Safe = "ZhuDongFangYu.exe" nocase ascii wide
+		$PCHunter32 = "PCHunter32.exe" nocase ascii wide
+		$PCHunter64 = "PCHunter64.exe" nocase ascii wide
+		$UseAPI0 = "ImageGetCertificateData"
+		$UseAPI1 = "EnumWindows" //+ GetClassName or GetWindowText or ...
+		//Modules
+		$DLL0 = "dir_watch.dll" nocase ascii wide
+		$DLL1 = "tracer.dll" nocase ascii wide
+		$DLL2 = "APIOverride.dll" nocase ascii wide
+		$DLL3 = "NtHookEngine.dll" nocase ascii wide
+		$DLL4 = "api_log.dll" nocase ascii wide
+		$DLL4x = "api_log.x64.dll" nocase ascii wide
+		$DLL5 = "LOG_API.DLL" nocase ascii wide
+		$DLL6 = "LOG_API32.DLL" nocase ascii wide
+		$DLL7 = "WpeSpy.dll" nocase ascii wide
+		$DLL8 = "WSockHook.dll" nocase ascii wide
+		$DLL9 = "cmdvrt32.dll" nocase ascii wide
+		$DLL10 = "cmdvrt64.dll" nocase ascii wide
+		$DLL11 = "SbieDll.dll" nocase ascii wide
+		$DLL12 = "SxIn.dll" nocase ascii wide
+		//Drivers
+		$Driver0 = "CaptureProcessMonitor.sys" nocase ascii wide
+		$Driver1 = "CaptureRegistryMonitor.sys" nocase ascii wide
+		$Driver2 = "CaptureFileMonitor.sys" nocase ascii wide
+
+	condition:
+		any of them
+}
+
+rule Detect_VM_and_SandBox : Malware
+{
+	strings:
+		$VMWare0 = "VMware" nocase ascii wide fullword
+		$VMWare1 = "vmtools" nocase ascii wide
+		$VMWare2 = "VMware Tools" nocase ascii wide
+		$VMware3 = "vmmouse" nocase ascii wide
+		$VMware4 = "VMXh" nocase ascii wide
+		$VMware5 = "vmhgfs.sys" nocase ascii wide
+		$VMware6 = "vmci.sys" nocase ascii wide
+		$VMware7 = "vmmouse.sys" nocase ascii wide
+		$VMware8 = "vmusbmouse.sys" nocase ascii wide
+		$VMware9 = "vmrawdsk.sys" nocase ascii wide
+		$VMware10 = "vmmemctl.sys" nocase ascii wide
+		$VMware11 = "vm3dmp.sys" nocase ascii wide
+		$VMware12 = "vsock.sys" nocase ascii wide
+		$VMware13 = "vmtray.dll" nocase ascii wide
+		$VMware14 = "vsocklib.dll" nocase ascii wide
+		$VMware15 = "VMwareUser.exe" nocase ascii wide
+		$VMware16 = "vmx_svga.sys" nocase ascii wide
+		$VMWareC0 = { B8 68 58 4D 56 BB 00 00 00 00 B9 0A 00 00 00 BA 58 56 00 00 ED }
+		//$VMWareM0 = "00-0C-29" nocase //MAC addresses varies.
+		$VMWareM0 = /00[-:]{0,1}0C[-:]{0,1}29/ nocase //MAC addresses varies.
+		$VMWareM1 = /00[-:]{0,1}05[-:]{0,1}69/ nocase
+		$VMWareM2 = /00[-:]{0,1}1C[-:]{0,1}14/ nocase
+		$VMWareM3 = /00[-:]{0,1}50[-:]{0,1}56/ nocase
+		$VMWareM4 = /00[-:]{0,1}1C[-:]{0,1}42/ nocase
+		$VBox0 = "VBOX" nocase ascii wide fullword
+		$VBox1 = "VIRTUALBOX" nocase ascii wide
+		$VBox2 = "VirtualBox Guest Additions" ascii wide
+		$VBox3 = "VBoxMouse" nocase ascii wide
+		$VBox4 = "VBoxService" nocase ascii wide
+		$VBox5 = "VBoxGuest" nocase ascii wide
+		$VBox6 = "VBoxVideo" nocase ascii wide
+		$VBox7 = "C:\\WINDOWS\\system32\\vbox" nocase ascii wide
+		$VBox8 = "VBoxHook.dll" nocase ascii wide
+		$VBox9 = "VBoxMiniRdrDN" nocase ascii wide
+		$VBox10 = "VEN_80EE&DEV_CAFE" nocase ascii wide
+		$VBoxM0 = /08[-:]{0,1}00[-:]{0,1}27/ nocase //MAC addresses varies.
+		$QEMU0 = "QEMU" nocase ascii wide
+		$SB0 = "sbiedll.dll" nocase ascii wide
+		$VHD0 = "IsNativeVhdBoot" ascii
+		$VHD1 = "Virtual HD" ascii wide
+		$VHD2 = "MS VirtualSCSI Disk Device" ascii wide
+		$VHD3 = /00[-:]{0,1}15[-:]{0,1}5D/ nocase
+		$Wine = "wine_get_unix_file_name" nocase ascii wide
+		$Bochs = "Bochs" nocase ascii wide
+		$XEN0 = "xennet.sys" nocase ascii wide
+		$XEN1 = "XEN0000" nocase ascii wide
+		$PARALLELS1 = /20[-:]{0,1}C9[-:]{0,1}D0/ nocase
+		$Cuckoo0 = "TEQUILABOOMBOOM" nocase ascii wide
+		// And Only 1 CPU, CPUID(0FA2) for Hyper-V, Small DriveSize, etc..
+		$VMCPUID = { 0F C7 C8 01 00 }
+		//UserName
+		$UserName0 = "SANDBOX" nocase ascii wide
+		$UserName1 = "VIRUS" nocase ascii wide
+		$UserName2 = "MALWARE" nocase ascii wide
+		$UserName3 = "MALTEST" nocase ascii wide
+		//HostName
+		$HostName0 = "brbrb-d8fb22af1" nocase ascii wide
+		$HostName1 = "jonathan-c561e0" nocase ascii wide
+		$HostName2 = "avreview1-VMXP" nocase ascii wide
+		$HostName3 = "vwinxp-maltest" nocase ascii wide
+		$HostName4 = "avreview-VMSunbox" nocase ascii wide
+		$HostName5 = "infected-system" nocase ascii wide
+		//Hyper-V and DMI Vendor
+		$HvVendor0 = "XenVMMXenVMM" nocase ascii wide
+		$HvVendor1 = "Microsoft Hv" nocase ascii wide
+		$HvVendor2 = "VMwareVMware" nocase ascii wide
+		$HvVendor3 = "KVMKVMKVM" nocase ascii wide
+		$HvVendor4 = "innotek GmbH" nocase ascii wide //VirtualBox
+		$HvVendor5 = "prl hyperv" nocase ascii wide
+		//BIOS
+		$BIOS0 = "PRLS" nocase ascii wide
+		//WMI
+		$WMI0 = "Win32_BIOS" nocase ascii wide
+		$WMI1 = "Win32_ComputerSystem" nocase ascii wide
+		$WMI2 = "Win32_DiskDrive" nocase ascii wide
+		//API
+		$API0 = "SetupDiGetDeviceRegistryProperty" nocase ascii wide
+
+	condition:
+		any of them or
+		 (any of ($UserName*) and pe.imports("advapi32.dll","GetUserNameA")) or
+		 (any of ($UserName*) and pe.imports("advapi32.dll","GetUserNameW")) 
+}
+
+rule Detect_WinDbg_OllyDbg_ClassName_Check : Malware
+{
+	strings:
+		$OllyDbg = "OLLYDBG"
+		$WinDbg = "WinDbgFrameClass"
+		
+	condition:
+		(pe.imports("user32.dll","FindWindowA") or 
+		pe.imports("user32.dll","FindWindowW")) and //A:ANSI W(Wide):Unicode
+		($OllyDbg or $WinDbg) 
+}
+
+rule Included_PE_File : Malware
+{
+	meta:
+		Description = "And IsPEfile: (2..#a) -> (1..#a)"
+
+	strings:
+		$a = "MZ"
+		$aPLibPE = { 4D 38 5A } //PEfile with aPLib
+
+	condition:
+		for any i in (2..#a): (uint32(@a[i] + uint32(@a[i] + 0x3C)) == 0x00004550)
+		or $aPLibPE
+}
+
+rule Useing_Other_Tools : Malware
+{
+	meta:
+		Description = "These names will be changed..."
+
+	strings:
+		$t0 = "WebBrowserPassView.exe" nocase ascii wide
+		$t1 = "QuarksPwDump.exe" nocase ascii wide
+		$t2 = "at.exe" nocase ascii wide
+		$t3 = "csvde.exe" nocase ascii wide
+		$t4 = "sdelete.exe" nocase ascii wide
+		$t5 = "mimikatz" nocase ascii wide //exe or dll
+		$t6 = "wce.exe" nocase ascii wide
+		$t7 = "lslsass32.exe" nocase ascii wide
+		$t8 = "lslsass64.exe" nocase ascii wide
+		$t9 = "psexec.exe" nocase ascii wide
+		$t10 = "winrs.exe" nocase ascii wide
+		$t11 = "sdbinst.exe" nocase ascii wide
+		$t12 = "mailpv.exe" nocase ascii wide
+		$t13 = "rdpv.exe" nocase ascii wide
+		$t14 = "wceaux.dll" nocase ascii wide
+		$t15 = "net.exe" nocase ascii wide
+		$t16 = "icacls.exe" nocase ascii wide
+		$t17 = "wevtutil.exe" nocase ascii wide
+		$t18 = "ldifde.exe" nocase ascii wide
+		$t19 = "PwDump7.exe" nocase ascii wide
+		$t20 = "PWDumpX.exe" nocase ascii wide
+		$t21 = "wmiexec.vbs" nocase ascii wide
+		$t22 = "mimikittenz" nocase ascii wide
+		$t23 = "gsecdump.exe" nocase ascii wide
+		$t24 = "ssleay32.dll" nocase ascii wide //SSL
+		$t25 = "libeay32.dll" nocase ascii wide //SSL
+		$t26 = "libssl32.dll" nocase ascii wide //SSL
+		$t27 = "MsMpEng.exe" nocase ascii wide
+		$t28 = "streams.exe" nocase ascii wide
+		$t29 = "vssadmin.exe" nocase ascii wide
+		$t30 = "wbadmin.exe" nocase ascii wide
+		$t31 = "PAExec.exe" nocase ascii wide //PsExec Alternative
+
+	condition:
+		any of them
+}
+
+rule Native_API : Malware
+{
+	meta:
+		Description = "Zw or Nt"
+
+	strings:
+		$a0 = /(Nt|Zw)QuerySystemInfomation/
+		//$a1 = "NtQueryInformationProcess" //->AntiDebug
+		$a2 = /(Nt|Zw)OpenProcess/
+		$a3 = /(Nt|Zw)QueryVirtualMemory/ //MemorySectionName:2 -> MEM_IMAGE -> ModuleName
+		$a4 = /(Nt|Zw)AllocateVirtualMemory/
+		$a5 = /(Nt|Zw)ProtectVirtualMemory/
+		$a6 = /(Nt|Zw)ReadVirtualMemory/
+		$a7 = /(Nt|Zw)WriteVirtualMemory/
+		$a8 = /(Nt|Zw)QueryInformationThread/
+		$a9 = /(Nt|Zw)OpenThread/
+		$a10 = "RtlCreateUserThread"
+		$a11 = /(Nt|Zw)CreateThreadEx/ //Also AntiDebug
+		$a12 = /(Nt|Zw)QueueApcThread/
+		//$a13 = /(Nt|Zw)SetInformationThread/ //->AntiDebug
+		$a14 = /(Nt|Zw)SuspendThread/
+		$a15 = /(Nt|Zw)ResumeThread/
+		$a16 = /(Nt|Zw)GetContextThread/
+		$a17 = /(Nt|Zw)SetContextThread/
+		$a18 = "LdrLoadDll"
+		$a19 = "LdrGetDllHandle"
+		$a20 = "LdrGetProcedureAddress"
+		$a21 = /(Nt|Zw)CreateFile/
+		$a22 = /(Nt|Zw)OpenFile/
+		$a23 = /(Nt|Zw)ReadFile/
+		$a24 = /(Nt|Zw)WriteFile/
+		$a25 = /(Nt|Zw)CreateKey/
+		$a26 = /(Nt|Zw)OpenKey/
+		$a27 = /(Nt|Zw)QueryValueKey/
+		$a28 = /(Nt|Zw)SetValueKey/
+		$a29 = /(Nt|Zw)DeleteKey/
+		$a30 = /(Nt|Zw)DeleteValueKey/
+		$a31 = "RltAdjustPrivilege"
+		$a32 = /(Nt|Zw)QueryInformationToken/
+		$a33 = "RtlCompressBuffer"
+		$a34 = "RtlDecompressBuffer"
+		$a35 = /(Nt|Zw)QuerySystemTime/
+		$a36 = /(Nt|Zw)QueryPerformanceCounter/
+		$a37 = /(Nt|Zw)OpenMutant/
+		$a38 = /(Nt|Zw)CreateMutant/
+		$a39 = /(Nt|Zw)Wow64QueryInformationProcess64/
+		$a40 = /(Nt|Zw)Wow64QueryVirtualMemory64/
+		$a41 = /(Nt|Zw)Wow64AllocateVirtualMemory64/
+		$a42 = /(Nt|Zw)Wow64ReadVirtualMemory64/
+		$a43 = /(Nt|Zw)Wow64WriteVirtualMemory64/
+		$a44 = "NtUserQueryWindow" //Not exported yet.
+		$a45 = "NtUserBuildHwndList" //Not exported yet.
+		$a46 = "NtUserFindWindowEx" //Not exported yet.
+		$a47 = "NtUserInternalGetWindowText" //Not exported yet.
+		$a48 = "NtUserGetClassName" //Not exported yet.
+		$a49 = "RtlSetProtectedPolicy"
+		$a50 = "RtlQueryProtectedPolicy"
+		$a51 = /(Nt|Zw)SetInformationVirtualMemory/ //Abuse Microsoft's Control Flow Guard (CFG)
+		//$aZ = "SetProcessValidCallTargets" nocase ascii wide //Abuse Microsoft's Control Flow Guard (CFG), KernelBase.dll
+		$a52 = "KiFastSystemCall"
+		$a53 = "RtlGetNativeSystemInformation"
+		$a54 = /(Nt|Zw)MapViewOfSection/
+		$a55 = "LdrpLoadDll" //+p
+		$a56 = "LdrHotPatchRoutine" nocase ascii wide
+		$a57 = /(Nt|Zw)DelayExecution/ nocase ascii wide
+		$a58 = "RtlMoveMemory" nocase ascii wide
+		$a59 = /(Nt|Zw)DeviceIoControlFile/ nocase ascii wide
+		$a60 = /(Nt|Zw)CreateProcessEx/ nocase ascii wide
+		$a61 = /(Nt|Zw)LoadDriver/ nocase ascii wide
+		$a62 = /(Nt|Zw)CreateUserProcess/ nocase ascii wide
+		$a63 = /(Nt|Zw)QueryIntervalProfile/ ascii wide  //kernel exploit
+		//$a64 = /(Nt|Zw)/ nocase ascii wide
+		//$a65 = /(Nt|Zw)/ nocase ascii wide
+
+	condition:
+		any of them
+}
+
+rule Payloads : Malware
+{
+	meta:
+		author = "AlienVault Labs"
+		info = "CommentCrew-threat-apt1"
+
+	strings:
+		$pay1 = "rusinfo.exe" wide ascii
+		$pay2 = "cmd.exe" wide ascii
+		$pay3 = "AdobeUpdater.exe" wide ascii
+		$pay4 = "buildout.exe" wide ascii
+		$pay5 = "DefWatch.exe" wide ascii
+		$pay6 = "d.exe" wide ascii
+		$pay7 = "em.exe" wide ascii
+		$pay8 = "IMSCMig.exe" wide ascii
+		$pay9 = "localfile.exe" wide ascii
+		$pay10 = "md.exe" wide ascii
+		$pay11 = "mdm.exe" wide ascii
+		$pay12 = "mimikatz.exe" wide ascii
+		$pay13 = "msdev.exe" wide ascii
+		$pay14 = "ntoskrnl.exe" wide ascii
+		$pay15 = "p.exe" wide ascii
+		$pay16 = "otepad.exe" wide ascii
+		$pay17 = "reg.exe" wide ascii
+		$pay18 = "regsvr.exe" wide ascii
+		$pay19 = "runinfo.exe" wide ascii
+		$pay20 = "AdobeUpdate.exe" wide ascii
+		$pay21 = "inetinfo.exe" wide ascii
+		$pay22 = "svehost.exe" wide ascii
+		$pay23 = "update.exe" wide ascii
+		$pay24 = "NTLMHash.exe" wide ascii
+		$pay25 = "wpnpinst.exe" wide ascii
+		$pay26 = "WSDbg.exe" wide ascii
+		$pay27 = "xcmd.exe" wide ascii
+		$pay28 = "adobeup.exe" wide ascii
+		$pay29 = "0830.bin" wide ascii
+		$pay30 = "1001.bin" wide ascii
+		$pay31 = "a.bin" wide ascii
+		$pay32 = "ISUN32.EXE" wide ascii
+		$pay33 = "AcroRD32.EXE" wide ascii
+		$pay34 = "INETINFO.EXE" wide ascii
+		$pay35 = "lsass.exe" wide ascii
+		$pay36 = "PowerShell.exe" wide ascii
+		$pay37 = "schtasks.exe" wide ascii
+		$pay38 = "mshta.exe" wide ascii
+
+	condition:
+		1 of them
+}
+
+rule Suspicious_Strings : Malware
+{
+	meta:
+		Description = "Example"
+
+	strings:
+		$SusStr0 = "CreateService"
+		$SusStr1 = "rundll32.exe" nocase ascii wide
+		$SusStr2 = "CurrentControlSet\\Services" nocase ascii wide
+		$SusStr3 = "Programs\\Startup" nocase ascii wide
+		$SusStr4 = "-ExecutionPolicy bypass" nocase ascii wide //powershell.exe
+		$SusStr5 = "-ExecutionPolicy unrestricted" nocase ascii wide //powershell.exe
+		$SusStr6 = "-WindowStyle Hidden" nocase ascii wide //powershell.exe
+		$SusStr7 = "CurrentVersion\\AeDebug" //HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows NT\CurrentVersion\AeDebug
+		$SusStr8 = "Inject::InjectProcessByName()" //KINS etc
+		$SusStr9 = "Inject::CopyImageToProcess()"
+		$SusStr10 = "Inject::InjectProcess()"
+		$SusStr11 = "Inject::InjectImageToProcess()"
+		$SusStr12 = "Drop::InjectStartThread()"
+		$SusStr13 = "%opensocks%" fullword //KINS DLL etc
+		$SusStr14 = "%openvnc%" fullword
+		$SusStr15 = "S-1-[0-9]+(-[0-9]+)+" //SID
+		$SusStr16 = { D0 CF 11 E0 A1 B1 1A E1 } //Embedding OLE2 file
+		$SusStr17 = "RSA1" wide ascii
+		$SusStr18 = "CryptoAPI Private Key" wide
+		$SusStr19 = "WINRAR.SFX" wide ascii
+		$SusStr20 = "CurrentControlSet\\Control\\Session Manager" nocase ascii wide
+		$SusStr21 = "bitcoin" nocase ascii wide
+		$SusStr22 = { 83 72 83 62 83 67 83 52 83 43 83 93 } //bitcoin as Jananese ANSI
+		$SusStr23 = { D3 30 C3 30 C8 30 B3 30 A4 30 F3 30 } //bitcoin as Jananese Unicode
+		$SusStr24 = "GlobalGetAtomName" nocase ascii wide //AtomBombing
+		$SusStr25 = "script:http:" nocase ascii wide
+		$SusStr26 = "NTWDBLIB.dll" nocase ascii wide //with cliconfg.exe to bypass UAC
+		$SusStr27 = "Image File Execution Options" nocase ascii wide //Reg to swap exe file
+		$SusStr28 = "cmd.exe /c del" nocase ascii wide
+
+		$Firmware0 = "FIRM" nocase ascii wide
+		$Firmware1 = "RSMB" nocase ascii wide
+
+		$SusAPI0 = "QueueUserAPC" nocase ascii wide
+		$SusAPI1 = "CreateRemoteThread" nocase ascii wide
+		$SusAPI2 = "SetProcessDEPPolicy" nocase ascii wide
+		$SusAPI3 = "CertOpenSystemStore" nocase ascii wide
+		$SusAPI4 = "LoadLibraryAStub" nocase ascii wide
+		$SusAPI5 = "CsrGetProcessId" nocase ascii wide
+		$SusAPI6 = "CredEnumerate" nocase ascii wide
+		$SusAPI7 = "CreateProcessInternal" nocase ascii wide
+		$SusAPI8 = "SetupDiGetDeviceRegistryProperty" nocase ascii wide
+
+
+/*
+		$SusStr = ""
+		$SusStr = ""
+		$SusStr = ""
+		$SusStr = ""
+		$SusStr = ""
+		$SusStr = ""
+		$SusStr = ""
+		$SusStr = ""
+*/
+
+	condition:
+		any of them
+}
+
+/*
+rule Reg_suspicious : Malware
+{
+	meta:
+		Description = "Many false hits. Use ONLY when you need."
+
+	strings:
+		$Reg0 = "SOFTWARE" nocase ascii wide
+		$Reg1 = "HKEY_CURRENT_USER" nocase ascii wide
+		$Reg2 = "HKEY_LOCAL_MACHINE" nocase ascii wide
+		$Reg3 = "CLSID" nocase ascii wide
+		$Reg4 = "regedit.exe" nocase ascii wide
+
+	condition:
+                any of them
+}
+*/
+
+rule Office_suspicious : Office Malware
+{
+	meta:
+		Description = "Just use Macros"
+
+	strings:
+		$IsMSOffice0 = { D0 CF 11 E0 A1 B1 1A E1 } //DOC, XLS, PPT
+		$IsMSOffice1 = { 50 4B 03 04 }  //ZIP: DOCM, XLSM, PPTM
+		$UseMacro0 = "Attribut" fullword
+		$UseMacro1 = "Macros"
+		//$suspicious0 = "Img_Painted" nocase ascii wide
+
+	condition:
+                ($IsMSOffice0 or $IsMSOffice1) and ($UseMacro0 or $UseMacro1)
+}
+
+rule PDF_suspicious : PDF Malware
+{
+	strings:
+		$base = "PDF"
+		$a0 = "JavaScript"
+		$a1 = "EmbeddedFiles"
+		$a2 = "FlateDecode"
+		$a3 = "Launch"
+		$a4 = "OpenAction"
+		$a5 = "URI"
+		$a6 = "SubmitForm"
+		$a7 = "ObjStm"
+
+	condition:
+		$base and ($a0 or $a1 or $a2 or $a3 or $a4 or $a5 or $a6 or $a7)
+
+}
+
+///Network
+rule Network_Behavior : cuckoo Malware
+{
+	meta:
+		Description = "Example"
+
+	condition:
+		cuckoo.network.http_request(/http:\/\/someone\.doingevil\.com/)
+}
+
+rule Network_Functions_and_Strings : Network
+{
+	strings:
+		$0 = "InternetConnect"
+		$1 = "InternetReadFile"
+		$2 = "InternetWriteFile"
+		$3 = "HttpSendRequest"
+		$4 = "WinHttpRequest"
+		$5 = "URLDownloadToFile"
+		$6 = "DnsQuery"
+		$7 = "FtpOpenFile"
+		$8 = "FtpGetFile"
+		$9 = "recv"
+		$10 = "socket" fullword //"fullword" reduce false positive.
+		$11 = "WSASocket"
+		$12 = "WSASend"
+		$13 = "GetHostName"
+		$14 = "send" fullword //"fullword" reduce false positive.
+		$15 = "PROXY" nocase ascii wide fullword //"fullword" reduce false positive.
+		$16 = "XMLHTTP" nocase
+		$17 = "workbook_open" nocase
+		$18 = "adodb.stream" nocase
+		$19 = "Root Entry"
+		$20 = "PeerCollabStartup" //P2P
+		$21 = "PeerCollabGetEndpointName" //P2P
+		$22 = "PeerCollabSetEndpointName" //P2P
+		$23 = "PeerCollabSignIn" //P2P
+		$24 = "PeerCollabSignOut" //P2P
+		$25 = "onion/" ascii wide //tor
+		$26 = "minergate" nocase ascii wide //Mining Pool
+		$27 = "stratum" nocase ascii wide //Mining Pool
+		$28 = "cryptonight" nocase ascii wide //Mining Pool
+		$29 = "monerohash" nocase ascii wide //Mining Pool
+		$30 = "nicehash" nocase ascii wide //Mining Pool
+		$31 = "dwarfpool" nocase ascii wide //Mining Pool
+		$32 = "suprnova" nocase ascii wide //Mining Pool
+		$33 = "nanopool" nocase ascii wide //Mining Pool
+		$34 = "xmrpool" nocase ascii wide //Mining Pool
+		$35 = "antpool" nocase ascii wide //Mining Pool
+		$36 = "pastebin" nocase ascii wide
+		$37 = "coinhive" nocase ascii wide
+		$38 = "xmrig.exe" nocase ascii wide //Mining Tool
+		$39 = "WinHttpOpenRequest"
+		$40 = "WinHttpSendRequest"
+		$41 = "WinHttpReceiveResponse"
+
+		/*
+		//Many false hits.
+		$IPV4 = /[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}/ wide ascii
+		$IPV6 = /([0-9a-fA-F]{1,4}:){7,7}[0-9a-fA-F]{1,4}/ wide ascii //Only for Basic Expression
+		*/
+
+	condition:
+		any of them
+}
+
+///PEiD(Please use UMPE.exe/UMPE64.exe as PEiD alternative.)
+////Packer / Obfuscator / Anti Forensics Tool
+rule UPX_v0_89_6_to_v1_02_or_v1_05_to_v1_22 : PEiD
+{
+	meta:
+		Author = "Luca@Digital Travesia"
+		Description = "PEiD scan test for UPX_UsaTest.EXE"
+
+	strings:
+		$a0 = { 60 BE ?? ?? ?? ?? 8D BE ?? ?? ?? ?? 57 83 CD FF EB }
+
+	condition:
+		//$a0 at pe.entry_point //Normal Scan
+		$a0 in (pe.entry_point..pe.entry_point + 20) //Deep Scan
+		//pe.sections[0].name == "UPX0" //No Strings version.
+		//pe.sections[pe.section_index(pe.entry_point)].name == "UPX1" //No Strings version.
+
+		//Obfuscator example
+		//$Obf0 = "Obfuscated with Dotfuscator"
+}
+
+////Compiler
+rule Microsoft_Visual_C_v9_to_v11_64bit : PEiD
+{
+	meta:
+		Author = "Luca@Digital Travesia"
+		Description = "PEiD scan test for UsaTest2_x64.exe"
+
+	strings:
+		$a0 = { 48 83 EC 28 E8 ?? ?? ?? ?? 48 83 C4 28 E9 ?? ?? ?? ?? CC }
+
+	condition:
+		$a0 at pe.entry_point
+}
+
+////Game Engine
+rule SiglusEngine_Japan : PEiD
+{
+	meta:
+		Author = "Luca@Digital Travesia"
+
+	strings:
+		$a0 = "Siglus" wide
+		$a1 = "Visual" wide
+
+	condition:
+		$a0 and $a1
+		//pe.version_info["FileDescription"] contains "Siglus"    //No Strings version.
+		//pe.version_info["InternalName"] contains "SiglusEngine" //No Strings version.
+}
+
+////ELF
+rule elf_Executable : ELF
+{
+	condition:
+		elf.type == elf.ET_EXEC
+}
+rule elf_64Bit : ELF
+{
+	condition:
+		elf.machine == elf.EM_X86_64
+}
+
+////MACH-O
+rule MACH_32Bit : MACH
+{
+	condition:
+		uint32(0) == 0xfeedface or uint32(0) == 0xcefaedfe
+}
+rule MACH_64Bit : MACH
+{
+	condition:
+		uint32(0) == 0xfeedfacf or uint32(0) == 0xcffaedfe
+}
+
+///Registry / File / Mutex
+rule Autoruns_Registry_and_File_Access : cuckoo Malware
+{
+	meta:
+		Description = "Autoruns"
+
+	condition:
+		cuckoo.filesystem.file_access(/autoexec\\.bat/) or
+		cuckoo.registry.key_access(/\\\\Software\\\\Microsoft\\\\Windows\\\\CurrentVersion\\\\Run/) or
+		cuckoo.registry.key_access(/\\\\Software\\\\Microsoft\\\\Windows\\\\CurrentVersion\\\\RunOnce/) or
+		cuckoo.registry.key_access(/\\\\Software\\\\Microsoft\\\\Windows\\\\CurrentVersion\\\\RunOnceEx/) or
+		cuckoo.registry.key_access(/\\\\Software\\\\Microsoft\\\\Windows\\\\CurrentVersion\\\\RunServices/) or
+		cuckoo.registry.key_access(/\\\\Software\\\\Microsoft\\\\Windows\\\\CurrentVersion\\\\RunServicesOnce/) or
+		cuckoo.registry.key_access(/\\\\Software\\\\Microsoft\\\\Windows\\\\CurrentVersion\\\\policies\\\\Explorer\\\\Run/)
+		// or
+		//cuckoo.sync.mutex(/EvilMutexName/)
+}
+
+///Xtra: Include other rules
+////other.yar
+//For separate files by topic or...
+//include "c:\\yara\\includes\\other1.yar"
+//include "../includes/other2.yar"
